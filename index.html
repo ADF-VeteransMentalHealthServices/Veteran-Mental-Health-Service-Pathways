@@ -74,7 +74,7 @@ svg{display:block}
 <body>
 <div class="topbar">
 <div class="title">Australian Veteran Psychosocial Health Service Pathways Framework</div>
-<div class="subtitle" id="viewLabel">Collapsed view (drill)</div>
+<div class="subtitle" id="viewLabel">Collapsed view </div>
 </div>
 <div class="wrap">
 <aside class="sidebar">
@@ -82,7 +82,7 @@ svg{display:block}
 <div class="card">
 <h3>View</h3>
 <div class="controls">
-<button class="primary" id="collapsedBtn">Collapsed (drill)</button>
+<button class="primary" id="collapsedBtn">Collapsed </button>
 <button class="primary" id="expandedBtn">Fully expanded</button>
 </div>
 <div class="small" id="hintPanel" style="margin-top:8px"></div>
@@ -595,6 +595,7 @@ function render(){
     const pos=lay.nodesPos.get(n.id);
     if (!pos) continue;
     const g=document.createElementNS("http://www.w3.org/2000/svg","g");
+    g.setAttribute("data-node-id", n.id);
     const faded=(hl && !hl.keepNodes.has(n.id));
     const active=(focus===n.id);
     g.setAttribute("class","node" + (faded ? " faded" : "") + (active ? " active" : ""));
@@ -644,12 +645,34 @@ function render(){
     svg.appendChild(g);
   }
 
-  document.getElementById("viewLabel").textContent = (state.view==="expanded") ? "Fully expanded view (all pathways)" : "Collapsed view (drill)";
+  document.getElementById("viewLabel").textContent = (state.view==="expanded") ? "Fully expanded view (all pathways)" : "Collapsed view";
   const hintEl = document.getElementById("hintPanel") || document.getElementById("hint");
   hintEl.textContent = (state.view==="expanded")
     ? "Fully expanded: hover highlights in/out; press on a node to lock highlight; use slicers to filter."
     : "Collapsed: press on a node to reveal connected nodes in the next column.";
   }
+
+
+function centerNodeInPane(id){
+  const pane = document.getElementById("vizPane");
+  if (!pane || !id) return;
+
+  let node = null;
+  const candidates = document.querySelectorAll(".node[data-node-id]");
+  for (const candidate of candidates){
+    if (candidate.getAttribute("data-node-id") === id){
+      node = candidate;
+      break;
+    }
+  }
+  if (!node || typeof node.getBBox !== "function") return;
+
+  const box = node.getBBox();
+  const zoom = state.zoom || 1;
+
+  pane.scrollLeft = Math.max(0, (box.x * zoom) - pane.clientWidth / 2 + (box.width * zoom) / 2);
+  pane.scrollTop = Math.max(0, (box.y * zoom) - pane.clientHeight / 2 + (box.height * zoom) / 2);
+}
 
 function buildSlicers() {
   const wrap = document.getElementById("slicerWrap");
@@ -676,11 +699,32 @@ function buildSlicers() {
     sel.addEventListener("change", ()=>{
       readSelections();
       setOptions();
+
+      const selectedValues = Array.from(sel.selectedOptions).map(o => o.value);
+      const firstSelected = selectedValues[0];
+
       for (const l of LEVELS) state.pathSel[l] = null;
-      state.selected = null;
-      state.lastClick = "slicer-change";
-      renderSoon();
-      updateBadges();
+      state.hovered = null;
+
+      if (firstSelected) {
+        const selectedNodeId = nodeId(lvl, firstSelected);
+
+        // Make slicer selections visible immediately in the viewing pane.
+        // Collapsed view only opens pathways after node clicks, so slicer selections
+        // switch to expanded view, highlight the selected node, and centre it.
+        state.view = "expanded";
+        state.selected = selectedNodeId;
+        state.lastClick = "slicer-change";
+
+        render();
+        updateBadges();
+        setTimeout(() => centerNodeInPane(selectedNodeId), 50);
+      } else {
+        state.selected = null;
+        state.lastClick = "slicer-change";
+        render();
+        updateBadges();
+      }
     });
     document.getElementById("q_" + idx).addEventListener("input", (e)=>{
       state.search[lvl] = e.target.value || "";
